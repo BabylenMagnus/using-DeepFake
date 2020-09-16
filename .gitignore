@@ -1,0 +1,9 @@
+data/vox-cpk.pth.tar
+data/*.mp4
+data/*.jpg
+data/*.jpeg
+__pycache__/
+.idea/
+.ipynb_checkpoints/
+
+
