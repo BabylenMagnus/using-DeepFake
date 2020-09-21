@@ -5,7 +5,8 @@ from model import Generator, KPDetector
 from torch.nn.parallel.data_parallel import DataParallel
 from scipy.spatial import ConvexHull
 import cv2
-from create_video import scale_image
+from create_video import scale_image, best_frame
+from tqdm import tqdm
 
 
 def normalize_kp(kp_source, kp_driving, kp_driving_initial, adapt_movement_scale=False,
@@ -62,22 +63,24 @@ def load_checkpoints():
     return generator, kp_detector
 
 
-def make_animation(image, video, generator, kp_detector, cascade, video_path,
-                   coord, long, relative=True, adapt_movement_scale=True):
+def make_animation(image, video, generator, kp_detector, cascade, out_path, video_path,
+                   relative=True, adapt_movement_scale=True):
     with torch.no_grad():
 
         source = torch.tensor(image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
         source = source.cuda()
-        last_frame = None
 
         fps = video.get(cv2.CAP_PROP_FPS)
         codec = cv2.VideoWriter_fourcc(*'XVID')
 
-        out = cv2.VideoWriter(video_path, codec, fps, (256, 256))
+        out = cv2.VideoWriter(out_path, codec, fps, (256, 256))
 
         kp_source = kp_detector(source)
+        coord, initial = best_frame(video_path, cascade, initial=True)
+        num_frame = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         ret, frame = video.read()
-        image = scale_image(frame, coord, long, frame.shape[0])
+
+        image = scale_image(initial, coord, coord[2], frame.shape, n=0.1)
         image = cv2.resize(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), (256, 256))
         image = image / 255
 
@@ -85,9 +88,9 @@ def make_animation(image, video, generator, kp_detector, cascade, video_path,
 
         kp_driving_initial = kp_detector(driving)
 
-        while True:
+        for _ in tqdm(range(num_frame + 1)):
 
-            frame, last_frame = scale_image(frame, coord, long, frame.shape[0])
+            frame = scale_image(frame, coord, coord[2], frame.shape)
             frame = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (256, 256))
             frame = frame / 255
             driving = torch.tensor(np.array(frame)[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)

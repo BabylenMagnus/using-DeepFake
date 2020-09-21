@@ -10,39 +10,6 @@ def compute_long(a, n, long, max_long):
     return high_a, high_b
 
 
-def best_frame(video_path, cascade):
-    video = cv2.VideoCapture(video_path)
-
-    max_long = 0
-    coord = (0, 0)
-
-    while True:     
-        ret, frame = video.read()
-
-        if not ret:
-            video.release()
-            return coord, max_long
-
-        faces = cascade.detectMultiScale(
-            frame,
-            scaleFactor=1.2,
-            minNeighbors=6
-        )
-
-        if len(faces) == 0:
-            continue
-
-        max_area_face = faces[0]
-
-        for face in faces:
-            if face[2] > max_area_face[2]:
-                max_area_face = face
-
-        if max_long < max_area_face[2]:
-            max_long = max_area_face[2]
-            coord = tuple(max_area_face[:2])
-
-
 def search_face(frame, cascade):
     faces = cascade.detectMultiScale(
         frame,
@@ -70,10 +37,43 @@ def search_face(frame, cascade):
     return frame[a:b, c:d]
 
 
-def scale_image(image, coord, long, max_long):
-    n = int(0.3 * max_long)
-    a, b = compute_long(coord[1], n, long, max_long)
-    c, d = compute_long(coord[0], n, long, max_long)
+def best_frame(video_path, cascade, initial=True):
+    video = cv2.VideoCapture(video_path)
+
+    while True:
+        ret, frame = video.read()
+
+        faces = cascade.detectMultiScale(
+            frame,
+            scaleFactor=1.2,
+            minNeighbors=6
+        )
+
+        if len(faces) == 0:
+            continue
+
+        max_area_face = faces[0]
+
+        for face in faces:
+            if face[2] > max_area_face[2]:
+                max_area_face = face
+
+        if initial:
+            return tuple(max_area_face), frame
+        return tuple(max_area_face)
+
+
+def scale_image(image, coord, long, shape, n=0.3):
+    n = int(n * shape[1])
+
+    a = coord[1] - n if n < coord[1] else 0
+    b = coord[1] + n + long
+    b = b if b < shape[0] else shape[0]
+
+    c = coord[0] - n if n < coord[0] else 0
+    d = coord[0] + long + n
+    d = d if d < shape[1] else shape[1]
+
     return image[a: b, c: d]
 
 
@@ -85,9 +85,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     cascade = cv2.CascadeClassifier(r'data/haarcascade.xml')
+    coord = best_frame(args.video, cascade)
     video = cv2.VideoCapture(args.video)
 
-    coord, max_long = best_frame(args.video, cascade)
     while True:
 
         ret, frame = video.read()
@@ -95,7 +95,7 @@ if __name__ == '__main__':
         if not ret:
             break
 
-        frame = scale_image(frame, coord, max_long, frame.shape[0])
+        frame = scale_image(frame, coord, coord[2], frame.shape, n=0.1)
 
         cv2.imshow('Video', frame)
 
