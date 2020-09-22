@@ -87,7 +87,7 @@ class AntiAliasInterpolation2d(nn.Module):
         if self.scale == 1.0:
             return input
 
-        out = F.pad(input, (self.ka, self.kb, self.ka, self.kb))
+        out = F.pad(input, [self.ka, self.kb, self.ka, self.kb])
         out = F.conv2d(out, weight=self.weight, groups=self.groups)
         out = F.interpolate(out, scale_factor=(self.scale, self.scale))
 

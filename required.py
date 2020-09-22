@@ -9,32 +9,27 @@ from create_video import scale_image, best_frame
 from tqdm import tqdm
 
 
-def normalize_kp(kp_source, kp_driving, kp_driving_initial, adapt_movement_scale=False,
-                 use_relative_movement=False, use_relative_jacobian=False):
-    if adapt_movement_scale:
-        source_area = ConvexHull(kp_source['value'][0].data.cpu().numpy()).volume
-        driving_area = ConvexHull(kp_driving_initial['value'][0].data.cpu().numpy()).volume
-        adapt_movement_scale = np.sqrt(source_area) / np.sqrt(driving_area)
-    else:
-        adapt_movement_scale = 1
+def normalize_kp(kp_source, kp_driving, kp_driving_initial):
+
+    source_area = ConvexHull(kp_source['value'][0].data.cpu().numpy()).volume
+    driving_area = ConvexHull(kp_driving_initial['value'][0].data.cpu().numpy()).volume
+    adapt_movement_scale = np.sqrt(source_area) / np.sqrt(driving_area)
 
     kp_new = {k: v for k, v in kp_driving.items()}
 
-    if use_relative_movement:
-        kp_value_diff = (kp_driving['value'] - kp_driving_initial['value'])
-        kp_value_diff *= adapt_movement_scale
-        kp_new['value'] = kp_value_diff + kp_source['value']
+    kp_value_diff = (kp_driving['value'] - kp_driving_initial['value'])
+    kp_value_diff *= adapt_movement_scale
+    kp_new['value'] = kp_value_diff + kp_source['value']
 
-        if use_relative_jacobian:
-            jacobian_diff = torch.matmul(kp_driving['jacobian'], torch.inverse(kp_driving_initial['jacobian']))
-            kp_new['jacobian'] = torch.matmul(jacobian_diff, kp_source['jacobian'])
+    jacobian_diff = torch.matmul(kp_driving['jacobian'], torch.inverse(kp_driving_initial['jacobian']))
+    kp_new['jacobian'] = torch.matmul(jacobian_diff, kp_source['jacobian'])
 
     return kp_new
 
 
 def load_checkpoints():
     """
-    Загружает модели, generator и kp_detector по модели и сохранению
+    load model from weight and yaml structure
     AliaksandrSiarohin/first-order-model
     """
 
@@ -63,8 +58,10 @@ def load_checkpoints():
     return generator, kp_detector
 
 
-def make_animation(image, video, generator, kp_detector, cascade, out_path, video_path,
-                   relative=True, adapt_movement_scale=True):
+def make_animation(image, video, generator, kp_detector, cascade, out_path, video_path):
+    """
+    iteration for video and write out from nn in new video with same fps
+    """
     with torch.no_grad():
 
         source = torch.tensor(image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
@@ -98,8 +95,7 @@ def make_animation(image, video, generator, kp_detector, cascade, out_path, vide
             driving = driving.cuda()
             kp_driving = kp_detector(driving)
             kp_norm = normalize_kp(kp_source=kp_source, kp_driving=kp_driving,
-                                   kp_driving_initial=kp_driving_initial, use_relative_movement=relative,
-                                   use_relative_jacobian=relative, adapt_movement_scale=adapt_movement_scale)
+                                   kp_driving_initial=kp_driving_initial)
             predict = generator(source, kp_source=kp_source, kp_driving=kp_norm)
 
             predict = np.transpose(predict['prediction'].data.cpu().numpy(), [0, 2, 3, 1])[0]
